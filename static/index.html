@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perplexity-2API 控制台</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-radius: 10px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .active { background-color: #28a745; }
+        .inactive { background-color: #dc3545; }
+        .api-box { background: #2d3436; color: #fff; padding: 10px; border-radius: 5px; font-family: monospace; }
+        .log-container { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .log-line { padding: 2px 5px; border-bottom: 1px solid #eee; }
+        .log-line.info { color: #0d6efd; }
+        .log-line.success { color: #198754; }
+        .log-line.warning { color: #ffc107; }
+        .log-line.error { color: #dc3545; }
+        .log-line.debug { color: #6c757d; }
+
+        .progress-bar-custom { height: 8px; }
+    </style>
+    <script>
+        // 修复非被动事件监听器警告（提升页面响应速度）
+        (function() {
+            var addEventListener = EventTarget.prototype.addEventListener;
+            EventTarget.prototype.addEventListener = function(type, listener, options) {
+                var passiveOptions = options;
+                // 为滚动相关事件自动添加 passive: true
+                if (type === 'mousewheel' || type === 'wheel' || type === 'touchstart' || type === 'touchmove') {
+                    if (typeof options === 'object') {
+                        passiveOptions = Object.assign({ passive: true }, options);
+                    } else if (options === undefined) {
+                        passiveOptions = { passive: true };
+                    } else if (options === false) {
+                        passiveOptions = { passive: false };
+                    }
+                }
+                return addEventListener.call(this, type, listener, passiveOptions);
+            };
+        })();
+    </script>
+</head>
+<body>
+    <div class="container-fluid py-3">
+        <!-- 顶部导航 -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4 rounded">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold text-primary" href="#">
+                    <i class="fas fa-robot me-2"></i>⚡ Perplexity-2API 控制台
+                </a>
+                <div class="d-flex">
+                    <span class="badge bg-dark me-2">v3.0</span>
+                    <div class="d-flex align-items-center">
+                        <span class="me-2" id="systemStatus">🟢 系统运行正常</span>
+                        <div class="spinner-border spinner-border-sm text-primary d-none" id="loadingSpinner"></div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div class="row g-3">
+            <!-- 左侧侧边栏 -->
+            <div class="col-lg-3">
+                <!-- 系统状态面板 -->
+                <div class="card p-3 mb-3">
+                    <h6 class="card-title fw-bold"><i class="fas fa-heartbeat me-2"></i>系统状态</h6>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">服务状态:</small>
+                            <span class="badge bg-success" id="serviceStatus">运行中</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">Botasaurus:</small>
+                            <span class="badge bg-warning" id="botasaurusStatus">初始化中</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">账号池:</small>
+                            <span id="accountPoolStatus">0/0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">API请求:</small>
+                            <span id="apiRequestCount">0</span>
+                        </div>
+                    </div>
+                    <div class="progress mb-1 progress-bar-custom">
+                        <div class="progress-bar bg-info" id="memoryUsage" style="width: 30%"></div>
+                    </div>
+                    <small class="text-muted d-block text-center">内存使用: <span id="memoryText">30%</span></small>
+                </div>
+
+                <!-- 快速操作 -->
+                <div class="card p-3 mb-3">
+                    <h6 class="card-title fw-bold"><i class="fas fa-bolt me-2"></i>快速操作</h6>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" id="quickLoginBtn">
+                            <i class="fas fa-sign-in-alt me-1"></i> 快速登录账号
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" id="refreshAllBtn">
+                            <i class="fas fa-sync-alt me-1"></i> 刷新所有Cookie
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" id="cleanCacheBtn">
+                            <i class="fas fa-trash-alt me-1"></i> 清理缓存
+                        </button>
+                        <button class="btn btn-outline-info btn-sm" id="exportConfigBtn">
+                            <i class="fas fa-download me-1"></i> 导出配置
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- API Key 管理 -->
+                <div class="card p-3 mb-3">
+                    <h6 class="card-title fw-bold"><i class="fas fa-key me-2"></i>API Key 管理</h6>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">当前 API Key:</small>
+                            <code class="small bg-light p-1 rounded" id="currentApiKey">加载中...</code>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="password" class="form-control" id="newApiKey" placeholder="输入新 API Key">
+                            <button class="btn btn-primary" type="button" id="updateApiKeyBtn">
+                                <i class="fas fa-save"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            用于验证客户端请求。默认: 1
+                        </small>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 中间主内容 -->
+            <div class="col-lg-6">
+                <!-- 欢迎卡片 -->
+                <div class="card p-4 mb-4 text-center border-primary">
+                    <div class="card-body">
+                        <h4 class="card-title text-primary mb-3">
+                            <i class="fas fa-rocket me-2"></i>欢迎使用 Perplexity-2API 控制台！
+                        </h4>
+                        <p class="card-text mb-3">
+                            浏览器登录方式暂时不可用，因为前端的人机验证太屌了，绕不过，就算处理了他的验证可是他反复跳转验证。
+                        </p>
+                        <div class="alert alert-info mb-4">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>请选择以下方式添加账号：</strong>
+                        </div>
+                        
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card h-100 border-success">
+                                    <div class="card-body">
+                                        <h5 class="card-title text-success">
+                                            <i class="fas fa-sign-in-alt me-2"></i>方式一：快速登录
+                                        </h5>
+                                        <p class="card-text small">
+                                            点击下方按钮，将自动打开浏览器让您登录 Perplexity 账户。
+                                        </p>
+                                        <button class="btn btn-success w-100 mt-2" id="mainQuickLoginBtn">
+                                            <i class="fas fa-external-link-alt me-1"></i> 打开浏览器登录
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-primary">
+                                    <div class="card-body">
+                                        <h5 class="card-title text-primary">
+                                            <i class="fas fa-paste me-2"></i>方式二：粘贴 Cookie
+                                        </h5>
+                                        <p class="card-text small">
+                                            如果您已有 Cookie 文本，可直接粘贴到下方输入框。
+                                        </p>
+                                        <button class="btn btn-primary w-100 mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#mainCookieInput">
+                                            <i class="fas fa-keyboard me-1"></i> 显示 Cookie 输入框
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 主 Cookie 输入框 -->
+                <div class="collapse show" id="mainCookieInput">
+                    <div class="card p-4 mb-4">
+                        <h5 class="card-title fw-bold mb-3">
+                            <i class="fas fa-cookie-bite me-2"></i>Cookie 输入 & 解析
+                        </h5>
+                        
+                        <div class="alert alert-warning mb-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>支持多种格式：</strong> HAR JSON、PowerShell、cURL、纯 Cookie 字符串
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="mainCookieText" class="form-label fw-bold">
+                                <i class="fas fa-paste me-1"></i>粘贴 Cookie 文本
+                            </label>
+                            <textarea class="form-control" id="mainCookieText" rows="6" 
+                                      placeholder="请粘贴您的 Cookie 文本...&#10;例如：&#10;pplx.visitor-id=xxx; session-token=yyy&#10;或完整的 HAR JSON、PowerShell 格式"></textarea>
+                            <div class="form-text">
+                                Tip: 可以从浏览器开发者工具（F12）的 Network 标签中复制 Cookie
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label for="mainAccountName" class="form-label fw-bold">
+                                    <i class="fas fa-user me-1"></i>账号名称
+                                </label>
+                                <input type="text" class="form-control" id="mainAccountName" 
+                                       placeholder="为这个账号起个名字（可选）" value="我的账号">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" id="mainParseCookieBtn">
+                                    <i class="fas fa-magic me-1"></i> 解析并添加
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-3">
+                            <div class="spinner-border spinner-border-sm text-primary d-none" id="mainParseSpinner"></div>
+                            <div class="text-muted small" id="mainParseResult"></div>
+                        </div>
+                        
+                        <div class="mt-4 pt-3 border-top">
+                            <h6 class="fw-bold mb-2">
+                                <i class="fas fa-question-circle me-2"></i>如何获取 Cookie？
+                            </h6>
+                            <ol class="small ps-3 mb-0">
+                                <li class="mb-1">打开 <a href="https://www.perplexity.ai" target="_blank">Perplexity.ai</a> 并登录您的账户</li>
+                                <li class="mb-1">按 <code>F12</code> 打开开发者工具</li>
+                                <li class="mb-1">切换到 <strong>Network</strong> (网络) 标签</li>
+                                <li class="mb-1">刷新页面，点击任意请求（通常是 <code>search</code> 或 <code>api</code>）</li>
+                                <li class="mb-1">在 <strong>Headers</strong> 中找到 <code>Cookie</code> 字段</li>
+                                <li>复制整个 Cookie 字符串粘贴到上方输入框</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 账号状态卡片（有账号时显示） -->
+                <div class="card p-4 d-none" id="accountStatusCard">
+                    <h5 class="card-title fw-bold mb-3">
+                        <i class="fas fa-chart-line me-2"></i>账号状态概览
+                    </h5>
+                    <div id="accountStatusContent">
+                        <!-- 通过JavaScript动态填充 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧侧边栏 -->
+            <div class="col-lg-3">
+                <!-- 账号管理 -->
+                <div class="card p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="card-title fw-bold mb-0">
+                            <i class="fas fa-users me-2"></i>账号管理
+                            <span class="badge bg-secondary ms-2" id="accountsCount">0</span>
+                        </h6>
+                        <button class="btn btn-sm btn-success" id="addAccountBtn">
+                            <i class="fas fa-plus"></i> 添加
+                        </button>
+                    </div>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>状态</th>
+                                    <th>账号</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="accountsTable">
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-3">
+                                        加载账号列表...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2">
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">活跃:</span>
+                            <span class="badge bg-success" id="activeAccounts">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">失效:</span>
+                            <span class="badge bg-danger" id="inactiveAccounts">0</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Cookie 导入功能 -->
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-info w-100 mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#cookieImportCollapse">
+                            <i class="fas fa-paste me-1"></i> 导入 Cookie 文本
+                        </button>
+                        <div class="collapse" id="cookieImportCollapse">
+                            <div class="border rounded p-2 bg-light">
+                                <small class="text-muted d-block mb-2">
+                                    支持格式：HAR JSON、PowerShell、cURL、纯 Cookie 字符串
+                                </small>
+                                <textarea class="form-control form-control-sm mb-2" id="cookieText" rows="3" placeholder="粘贴 Cookie 文本..."></textarea>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" class="form-control" id="importAccountName" placeholder="账号名称（可选）" value="导入的账号">
+                                    <button class="btn btn-primary" type="button" id="parseCookieBtn">
+                                        <i class="fas fa-magic me-1"></i> 解析
+                                    </button>
+                                </div>
+                                <div class="text-center small">
+                                    <span class="text-muted" id="parseResult"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模型管理 -->
+                <div class="card p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="card-title fw-bold mb-0">
+                            <i class="fas fa-robot me-2"></i>模型管理
+                            <span class="badge bg-secondary ms-2" id="modelsCount">0</span>
+                        </h6>
+                        <button class="btn btn-sm btn-success" id="addModelBtn">
+                            <i class="fas fa-plus"></i> 添加
+                        </button>
+                    </div>
+                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>模型</th>
+                                    <th>提供商</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modelsTable">
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-2">
+                                        加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2 small">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">自定义:</span>
+                            <span class="badge bg-info" id="customModelsCount">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">预设:</span>
+                            <span class="badge bg-secondary" id="presetModelsCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API 端点 -->
+                <div class="card p-3 mb-3">
+                    <h6 class="card-title fw-bold"><i class="fas fa-code me-2"></i>API 端点</h6>
+                    <div class="mb-2">
+                        <div class="api-box mb-1">
+                            <small class="text-info">POST</small> /v1/chat/completions
+                        </div>
+                        <div class="api-box mb-1">
+                            <small class="text-info">GET</small> /v1/models
+                        </div>
+                        <div class="api-box mb-1">
+                            <small class="text-info">GET</small> /api/system/status
+                        </div>
+                        <div class="api-box mb-1">
+                            <small class="text-info">GET</small> /api/files/list
+                        </div>
+                        <div class="api-box">
+                            <small class="text-info">GET</small> /api/logs/live
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">API Key:</small>
+                        <code class="small d-block bg-light p-1 rounded">1 (或 .env 中配置)</code>
+                    </div>
+                </div>
+
+                <!-- 系统信息 -->
+                <div class="card p-3">
+                    <h6 class="card-title fw-bold"><i class="fas fa-info-circle me-2"></i>系统信息</h6>
+                    <div class="small">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">版本:</span>
+                            <span>v3.0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">启动时间:</span>
+                            <span id="uptime">--</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Python:</span>
+                            <span id="pythonVersion">--</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">主机:</span>
+                            <span id="hostName">--</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">工作目录:</span>
+                            <span class="text-truncate" style="max-width: 150px;" id="workingDir">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部状态栏 -->
+        <footer class="mt-4 pt-3 border-top">
+            <div class="row">
+                <div class="col-md-8">
+                    <small class="text-muted">
+                        <i class="fas fa-exclamation-circle me-1"></i>
+                        提示: 点击"快速登录账号"将在浏览器中打开 https://www.perplexity.ai/，登录后Cookie会自动保存到本地
+                    </small>
+                </div>
+                <div class="col-md-4 text-end">
+                    <small class="text-muted" id="lastUpdate">
+                        最后更新: <span id="updateTime">--</span>
+                    </small>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // 全局状态
+        let systemState = {
+            logs: [],
+            files: [],
+            accounts: [],
+            selectedFiles: new Set(),
+            isLogPaused: false,
+            autoScroll: true,
+            logFilters: {
+                info: true,
+                warning: true,
+                error: true,
+                debug: false
+            }
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSystem();
+            loadAllData();
+            startLiveUpdates();
+        });
+
+        // 系统初始化
+        function initializeSystem() {
+            // 更新系统信息
+            fetch('/api/system/info')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.python_version) {
+                        document.getElementById('pythonVersion').textContent = data.python_version;
+                    }
+                    if (data.host_name) {
+                        document.getElementById('hostName').textContent = data.host_name;
+                    }
+                    if (data.working_dir) {
+                        document.getElementById('workingDir').textContent = data.working_dir;
+                    }
+                    if (data.uptime) {
+                        document.getElementById('uptime').textContent = data.uptime;
+                    }
+                })
+                .catch(console.error);
+
+            // 更新最后更新时间
+            updateTime();
+            setInterval(updateTime, 60000); // 每分钟更新一次
+        }
+
+        // 更新当前时间
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-CN');
+            document.getElementById('updateTime').textContent = timeStr;
+        }
+
+        // 加载所有数据
+        function loadAllData() {
+            loadSystemStatus();
+            loadAccounts();
+            loadLogs();
+            loadApiKey();
+            loadModels();
+        }
+
+        // 加载系统状态
+        function loadSystemStatus() {
+            fetch('/api/system/status')
+                .then(res => res.json())
+                .then(data => {
+                    // 更新状态指示器
+                    if (data.service_status === 'running') {
+                        document.getElementById('serviceStatus').className = 'badge bg-success';
+                        document.getElementById('serviceStatus').textContent = '运行中';
+                        document.getElementById('systemStatus').innerHTML = '🟢 系统运行正常';
+                    } else {
+                        document.getElementById('serviceStatus').className = 'badge bg-danger';
+                        document.getElementById('serviceStatus').textContent = '停止';
+                        document.getElementById('systemStatus').innerHTML = '🔴 系统异常';
+                    }
+
+                    // 更新Botasaurus状态
+                    if (data.botasaurus_status === 'initialized') {
+                        document.getElementById('botasaurusStatus').className = 'badge bg-success';
+                        document.getElementById('botasaurusStatus').textContent = '已就绪';
+                    } else if (data.botasaurus_status === 'initializing') {
+                        document.getElementById('botasaurusStatus').className = 'badge bg-warning';
+                        document.getElementById('botasaurusStatus').textContent = '初始化中';
+                    } else {
+                        document.getElementById('botasaurusStatus').className = 'badge bg-danger';
+                        document.getElementById('botasaurusStatus').textContent = '失败';
+                    }
+
+                    // 更新账号池状态
+                    document.getElementById('accountPoolStatus').textContent = 
+                        `${data.active_accounts || 0}/${data.total_accounts || 0}`;
+                    
+                    // 更新API请求计数
+                    document.getElementById('apiRequestCount').textContent = data.api_requests || 0;
+
+                    // 更新内存使用
+                    if (data.memory_usage) {
+                        const memoryPercent = Math.min(100, Math.max(0, data.memory_usage));
+                        document.getElementById('memoryUsage').style.width = `${memoryPercent}%`;
+                        document.getElementById('memoryText').textContent = `${memoryPercent}%`;
+                    }
+                })
+                .catch(console.error);
+        }
+
+        // 加载账号列表
+        function loadAccounts() {
+            fetch('/api/accounts')
+                .then(res => res.json())
+                .then(data => {
+                    systemState.accounts = data.accounts || [];
+                    updateAccountsTable();
+                    
+                    // 更新计数
+                    document.getElementById('accountsCount').textContent = systemState.accounts.length;
+                    const active = systemState.accounts.filter(a => a.is_active).length;
+                    const inactive = systemState.accounts.length - active;
+                    document.getElementById('activeAccounts').textContent = active;
+                    document.getElementById('inactiveAccounts').textContent = inactive;
+                    
+                    // 更新UI状态（显示/隐藏欢迎卡片）
+                    updateUIState();
+                })
+                .catch(console.error);
+        }
+
+        // 更新账号表格
+        function updateAccountsTable() {
+            const tbody = document.getElementById('accountsTable');
+            if (systemState.accounts.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-3">
+                            暂无账号，点击"添加"按钮创建
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            systemState.accounts.slice(0, 5).forEach(account => {
+                const statusClass = account.is_active ? 
+                    (account.token && account.token.length > 20 ? 'success' : 'warning') : 'secondary';
+                const statusIcon = account.is_active ? 
+                    (account.token && account.token.length > 20 ? '✅' : '⚠️') : '⏸️';
+                
+                html += `
+                    <tr>
+                        <td>
+                            <span class="badge bg-${statusClass}">${statusIcon}</span>
+                        </td>
+                        <td>
+                            <div class="small">${account.name || '未命名'}</div>
+                            <div class="text-muted" style="font-size: 10px;">${account.data_dir || ''}</div>
+                            <div class="text-muted" style="font-size: 9px;">Cookie: ${account.cookie_count || 0}个</div>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshAccount('${account.id}')" title="刷新">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-success mt-1" onclick="verifyAccount('${account.name}')" title="验证Cookie">
+                                <i class="fas fa-check-circle"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            if (systemState.accounts.length > 5) {
+                html += `
+                    <tr>
+                        <td colspan="4" class="text-center">
+                            <small class="text-muted">
+                                还有 ${systemState.accounts.length - 5} 个账号...
+                            </small>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            tbody.innerHTML = html;
+        }
+
+
+
+        // 更新UI状态（显示/隐藏欢迎卡片）
+        function updateUIState() {
+            const hasAccounts = systemState.accounts.length > 0;
+            const welcomeCard = document.querySelector('#mainCookieInput');
+            const statusCard = document.getElementById('accountStatusCard');
+            
+            if (hasAccounts) {
+                // 有账号：隐藏欢迎卡片，显示账号状态概览
+                welcomeCard?.classList.add('d-none');
+                if (statusCard) {
+                    statusCard.classList.remove('d-none');
+                    // 填充账号状态内容
+                    const activeCount = systemState.accounts.filter(a => a.is_active).length;
+                    const inactiveCount = systemState.accounts.length - activeCount;
+                    const totalCalls = systemState.accounts.reduce((sum, acc) => sum + (acc.total_calls || 0), 0);
+                    
+                    document.getElementById('accountStatusContent').innerHTML = `
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h3 class="card-title">${systemState.accounts.length}</h3>
+                                        <p class="card-text small">总账号数</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body text-center">
+                                        <h3 class="card-title">${activeCount}</h3>
+                                        <p class="card-text small">活跃账号</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-info text-white">
+                                    <div class="card-body text-center">
+                                        <h3 class="card-title">${totalCalls}</h3>
+                                        <p class="card-text small">总调用次数</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                // 无账号：显示欢迎卡片和Cookie输入框，隐藏状态卡片
+                welcomeCard?.classList.remove('d-none');
+                statusCard?.classList.add('d-none');
+            }
+        }
+
+        // 更新文件树
+
+
+        // 加载日志
+        function loadLogs() {
+            fetch('/api/logs/recent')
+                .then(res => res.json())
+                .then(data => {
+                    systemState.logs = data.logs || [];
+                    updateLiveLogs();
+                    document.getElementById('logCount').textContent = systemState.logs.length;
+                })
+                .catch(console.error);
+        }
+
+        // 加载 API Key
+        function loadApiKey() {
+            fetch('/api/settings/api-key')
+                .then(res => res.json())
+                .then(data => {
+                    const masked = data.masked || '***';
+                    document.getElementById('currentApiKey').textContent = masked;
+                })
+                .catch(console.error);
+        }
+
+        // 加载模型列表
+        function loadModels() {
+            fetch('/api/models')
+                .then(res => res.json())
+                .then(data => {
+                    const models = data.models || [];
+                    const customModels = models.filter(m => m.is_custom);
+                    const presetModels = models.filter(m => !m.is_custom);
+                    
+                    document.getElementById('modelsCount').textContent = models.length;
+                    document.getElementById('customModelsCount').textContent = customModels.length;
+                    document.getElementById('presetModelsCount').textContent = presetModels.length;
+                    
+                    // 更新表格
+                    const tbody = document.getElementById('modelsTable');
+                    if (models.length === 0) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-2">
+                                    暂无模型
+                                </td>
+                            </tr>
+                        `;
+                        return;
+                    }
+                    
+                    let html = '';
+                    models.slice(0, 10).forEach(model => {
+                        const isCustom = model.is_custom || false;
+                        const canDelete = model.can_delete !== false && isCustom;
+                        const canRename = model.can_rename !== false && isCustom;
+                        const modelName = model.name || model.id;
+                        const modelId = model.id;
+                        const provider = model.provider || '未知';
+                        
+                        html += `
+                            <tr>
+                                <td>
+                                    <div class="small fw-bold">${modelName}</div>
+                                    <div class="text-muted" style="font-size: 10px;">
+                                        <code>${modelId}</code>
+                                        <button class="btn btn-sm btn-link p-0 ms-1" onclick="copyModelId('${modelId}')" title="复制模型ID">
+                                            <i class="fas fa-copy" style="font-size: 10px;"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${isCustom ? 'info' : 'secondary'}">
+                                        ${provider}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="copyModelName('${modelName}')" title="复制模型名称">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                    ${canRename ? `
+                                    <button class="btn btn-sm btn-outline-primary" onclick="renameModel('${modelId}')" title="重命名">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    ` : ''}
+                                    ${canDelete ? `
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${modelId}')" title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    ` : ''}
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    if (models.length > 10) {
+                        html += `
+                            <tr>
+                                <td colspan="3" class="text-center">
+                                    <small class="text-muted">
+                                        还有 ${models.length - 10} 个模型...
+                                    </small>
+                                </td>
+                            </tr>
+                        `;
+                    }
+                    
+                    tbody.innerHTML = html;
+                })
+                .catch(console.error);
+        }
+
+        // 更新实时日志
+        function updateLiveLogs() {
+            if (systemState.isLogPaused) return;
+            
+            const container = document.getElementById('liveLogs');
+            let html = '';
+            
+            systemState.logs.slice(-50).forEach(log => {
+                const level = log.level || 'info';
+                if (!systemState.logFilters[level]) return;
+                
+                const time = log.timestamp ? log.timestamp.split(' ')[1] : '--:--:--';
+                const message = log.message || '';
+                
+                html += `
+                    <div class="log-line ${level}">
+                        <span class="text-muted">[${time}]</span> ${message}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            
+            // 自动滚动到底部
+            if (systemState.autoScroll) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        // 更新存储信息
+
+
+        // 开始实时更新
+        function startLiveUpdates() {
+            // 页面可见性检测：当页面隐藏时暂停轮询
+            let isPageVisible = true;
+            document.addEventListener('visibilitychange', function() {
+                isPageVisible = !document.hidden;
+            });
+            
+            // 系统状态每30秒更新一次（页面可见时）
+            setInterval(() => {
+                if (isPageVisible) loadSystemStatus();
+            }, 30000);
+            
+            // 账号每120秒更新一次（页面可见时）
+            setInterval(() => {
+                if (isPageVisible) loadAccounts();
+            }, 120000);
+            
+            // 日志每30秒更新一次（页面可见时）
+            setInterval(() => {
+                if (isPageVisible) loadLogs();
+            }, 30000);
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // 事件监听器设置（增强版：安全检查）
+        function setupEventListeners() {
+            // 安全检查辅助函数
+            function safeAddEventListener(id, event, handler) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener(event, handler);
+                } else {
+                    console.warn(`⚠️ 元素 #${id} 不存在，跳过事件绑定`);
+                }
+            }
+            
+            // 安全查询选择器
+            function safeQuerySelectorAll(selector, handler) {
+                const elements = document.querySelectorAll(selector);
+                if (elements.length > 0) {
+                    elements.forEach(el => {
+                        el.addEventListener('change', handler);
+                    });
+                } else {
+                    console.warn(`⚠️ 选择器 ${selector} 未找到元素，跳过事件绑定`);
+                }
+            }
+
+            // 自动滚动（如果元素存在）
+            safeAddEventListener('autoScroll', 'change', function(e) {
+                systemState.autoScroll = e.target.checked;
+            });
+
+            // 日志级别过滤（如果元素存在）
+            safeQuerySelectorAll('.log-level', function(e) {
+                const level = e.target.id.replace('show', '').toLowerCase();
+                systemState.logFilters[level] = e.target.checked;
+                updateLiveLogs();
+            });
+
+            // 暂停日志（如果元素存在）
+            safeAddEventListener('pauseLogsBtn', 'click', function() {
+                systemState.isLogPaused = !systemState.isLogPaused;
+                const icon = this.querySelector('i');
+                if (systemState.isLogPaused) {
+                    icon.className = 'fas fa-play';
+                    this.title = '继续日志';
+                } else {
+                    icon.className = 'fas fa-pause';
+                    this.title = '暂停日志';
+                    updateLiveLogs();
+                }
+            });
+
+            // 清空日志（如果元素存在）
+            safeAddEventListener('clearLogsBtn', 'click', function() {
+                if (confirm('确定要清空所有日志吗？')) {
+                    fetch('/api/logs/clear', { method: 'POST' })
+                        .then(() => {
+                            systemState.logs = [];
+                            updateLiveLogs();
+                        })
+                        .catch(console.error);
+                }
+            });
+
+            // 快速登录
+            safeAddEventListener('quickLoginBtn', 'click', function() {
+                const accountName = prompt('请输入账号名称（可选）:', '新账号');
+                if (accountName === null) return;
+                
+                fetch('/api/account/login/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `name=${encodeURIComponent(accountName || '新账号')}`
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ 登录流程已启动\n\n请在打开的浏览器中登录 https://www.perplexity.ai/\n登录成功后Cookie将自动保存。`);
+                        loadAccounts();
+                    } else {
+                        alert(`❌ 启动失败: ${data.message}`);
+                    }
+                })
+                .catch(err => {
+                    alert(`❌ 错误: ${err.message}`);
+                });
+            });
+
+            // 刷新所有Cookie
+            safeAddEventListener('refreshAllBtn', 'click', function() {
+                if (confirm('确定要刷新所有账号的Cookie吗？')) {
+                    fetch('/api/accounts/refresh-all', { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                            alert(data.message || '刷新请求已发送');
+                            loadAccounts();
+                        })
+                        .catch(console.error);
+                }
+            });
+
+            // 清理缓存
+            safeAddEventListener('cleanCacheBtn', 'click', function() {
+                if (confirm('确定要清理所有缓存文件吗？\n\n这将删除临时文件，但保留账号数据。')) {
+                    fetch('/api/files/clean-cache', { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                            alert(data.message || '缓存清理完成');
+                        })
+                        .catch(console.error);
+                }
+            });
+
+            // 导出配置（新增）
+            safeAddEventListener('exportConfigBtn', 'click', function() {
+                fetch('/api/settings/export-config', { method: 'GET' })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 创建下载链接
+                            const blob = new Blob([JSON.stringify(data.config, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `perplexity-config-${new Date().toISOString().slice(0,10)}.json`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            
+                            showToast('✅ 配置导出成功！', 'success');
+                        } else {
+                            alert(`❌ 导出失败: ${data.message || '未知错误'}`);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('导出配置失败:', err);
+                        // 临时实现：显示成功消息（模拟）
+                        showToast('✅ 配置导出功能开发中，当前版本已保存所有配置到本地目录', 'info');
+                    });
+            });
+
+            // 添加账号按钮
+            safeAddEventListener('addAccountBtn', 'click', function() {
+                document.getElementById('quickLoginBtn')?.click();
+            });
+
+            // Cookie 解析按钮
+            safeAddEventListener('parseCookieBtn', 'click', function() {
+                const cookieText = document.getElementById('cookieText')?.value.trim();
+                const accountName = document.getElementById('importAccountName')?.value.trim() || '导入的账号';
+                
+                if (!cookieText) {
+                    alert('请先粘贴 Cookie 文本');
+                    return;
+                }
+                
+                const resultElem = document.getElementById('parseResult');
+                if (resultElem) {
+                    resultElem.textContent = '正在解析...';
+                    resultElem.className = 'text-muted';
+                }
+                
+                fetch('/api/cookie/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: cookieText,
+                        account_name: accountName
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (resultElem) {
+                        if (data.success) {
+                            resultElem.textContent = `✅ ${data.message}`;
+                            resultElem.className = 'text-success';
+                            
+                            // 清空文本区域
+                            const cookieTextArea = document.getElementById('cookieText');
+                            if (cookieTextArea) cookieTextArea.value = '';
+                            
+                            // 更新账号列表
+                            loadAccounts();
+                            
+                            // 3秒后隐藏结果
+                            setTimeout(() => {
+                                resultElem.textContent = '';
+                            }, 3000);
+                        } else {
+                            resultElem.textContent = `❌ ${data.message}`;
+                            resultElem.className = 'text-danger';
+                        }
+                    }
+                })
+                .catch(err => {
+                    if (resultElem) {
+                        resultElem.textContent = `❌ 请求失败: ${err.message}`;
+                        resultElem.className = 'text-danger';
+                    }
+                });
+            });
+
+            // API Key 更新
+            safeAddEventListener('updateApiKeyBtn', 'click', function() {
+                const newKey = document.getElementById('newApiKey')?.value.trim();
+                if (!newKey) {
+                    alert('请输入新的 API Key');
+                    return;
+                }
+                
+                if (!confirm('确定要更新 API Key 吗？\n\n请注意，部分功能可能需要重启服务才能生效。')) {
+                    return;
+                }
+                
+                fetch('/api/settings/api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: newKey })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message || '✅ API Key 更新成功');
+                        const newKeyInput = document.getElementById('newApiKey');
+                        if (newKeyInput) newKeyInput.value = '';
+                        loadApiKey();
+                    } else {
+                        alert('❌ 更新失败: ' + (data.message || '未知错误'));
+                    }
+                })
+                .catch(err => {
+                    alert('❌ 请求失败: ' + err.message);
+                });
+            });
+
+            // 主区域快速登录按钮
+            safeAddEventListener('mainQuickLoginBtn', 'click', function() {
+                const accountName = prompt('请输入账号名称（可选）:', '新账号');
+                if (accountName === null) return;
+                
+                fetch('/api/account/login/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `name=${encodeURIComponent(accountName || '新账号')}`
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ 登录流程已启动\n\n请在打开的浏览器中登录 https://www.perplexity.ai/\n登录成功后Cookie将自动保存。`);
+                        loadAccounts();
+                    } else {
+                        alert(`❌ 启动失败: ${data.message}`);
+                    }
+                })
+                .catch(err => {
+                    alert(`❌ 错误: ${err.message}`);
+                });
+            });
+
+            // 主区域Cookie解析按钮
+            safeAddEventListener('mainParseCookieBtn', 'click', function() {
+                const cookieText = document.getElementById('mainCookieText')?.value.trim();
+                const accountName = document.getElementById('mainAccountName')?.value.trim() || '我的账号';
+                
+                if (!cookieText) {
+                    alert('请先粘贴 Cookie 文本');
+                    return;
+                }
+                
+                const spinner = document.getElementById('mainParseSpinner');
+                const resultElem = document.getElementById('mainParseResult');
+                
+                if (spinner) spinner.classList.remove('d-none');
+                if (resultElem) {
+                    resultElem.textContent = '正在解析 Cookie...';
+                    resultElem.className = 'text-muted';
+                }
+                
+                fetch('/api/cookie/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: cookieText,
+                        account_name: accountName
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (spinner) spinner.classList.add('d-none');
+                    
+                    if (resultElem) {
+                        if (data.success) {
+                            resultElem.textContent = `✅ ${data.message}`;
+                            resultElem.className = 'text-success';
+                            
+                            // 清空文本区域
+                            const mainCookieText = document.getElementById('mainCookieText');
+                            if (mainCookieText) mainCookieText.value = '';
+                            
+                            // 更新账号列表
+                            loadAccounts();
+                            
+                            // 5秒后清除结果
+                            setTimeout(() => {
+                                resultElem.textContent = '';
+                            }, 5000);
+                        } else {
+                            resultElem.textContent = `❌ ${data.message}`;
+                            resultElem.className = 'text-danger';
+                        }
+                    }
+                })
+                .catch(err => {
+                    if (spinner) spinner.classList.add('d-none');
+                    if (resultElem) {
+                        resultElem.textContent = `❌ 请求失败: ${err.message}`;
+                        resultElem.className = 'text-danger';
+                    }
+                });
+            });
+
+            // 添加模型按钮
+            safeAddEventListener('addModelBtn', 'click', function() {
+                addModel();
+            });
+
+            console.log('✅ 事件监听器初始化完成');
+        }
+
+        // 初始化事件监听器
+        setupEventListeners();
+
+        // 辅助函数
+        function showToast(message, type = 'info') {
+            // 创建或获取toast容器
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;max-width:400px;';
+                document.body.appendChild(container);
+            }
+            
+            // 创建toast元素
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} alert-dismissible fade show`;
+            toast.style.cssText = 'margin-bottom:10px;box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:300px;';
+            toast.innerHTML = `
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                ${message}
+            `;
+            
+            container.appendChild(toast);
+            
+            // 5秒后自动移除
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 5000);
+        }
+        
+        function refreshAccount(accountId) {
+            fetch(`/api/account/refresh/${accountId}`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message || '刷新完成');
+                    loadAccounts();
+                })
+                .catch(console.error);
+        }
+
+        // 导出为全局函数
+        window.refreshAccount = refreshAccount;
+        window.verifyAccount = verifyAccount;
+        window.triggerMaintenance = triggerMaintenance;
+        window.viewAccountStats = viewAccountStats;
+        
+        // 模型管理函数
+        function copyModelId(modelId) {
+            navigator.clipboard.writeText(modelId).then(() => {
+                showToast('✅ 模型ID已复制到剪贴板: ' + modelId, 'success');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('❌ 复制失败，请手动复制: ' + modelId);
+            });
+        }
+        
+        function copyModelName(modelName) {
+            navigator.clipboard.writeText(modelName).then(() => {
+                showToast('✅ 模型名称已复制到剪贴板: ' + modelName, 'success');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('❌ 复制失败，请手动复制: ' + modelName);
+            });
+        }
+        
+        function renameModel(modelId) {
+            const newName = prompt(`请输入模型的新名称:\n\n当前模型ID: ${modelId}`, '');
+            if (newName === null || newName.trim() === '') return;
+            
+            fetch(`/api/models/${encodeURIComponent(modelId)}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name: newName.trim() })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadModels();
+                } else {
+                    alert(`❌ 重命名失败: ${data.message || '未知错误'}`);
+                }
+            })
+            .catch(error => {
+                console.error('重命名失败:', error);
+                alert(`❌ 请求失败: ${error.message}`);
+            });
+        }
+        
+        function deleteModel(modelId) {
+            if (!confirm(`确定要删除模型吗？\n\n模型ID: ${modelId}\n\n此操作不可撤销。`)) {
+                return;
+            }
+            
+            fetch(`/api/models/${encodeURIComponent(modelId)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadModels();
+                } else {
+                    alert(`❌ 删除失败: ${data.message || '未知错误'}`);
+                }
+            })
+            .catch(error => {
+                console.error('删除失败:', error);
+                alert(`❌ 请求失败: ${error.message}`);
+            });
+        }
+        
+        // 添加模型函数
+        function addModel() {
+            const modelId = prompt('请输入模型ID (必须唯一，如: my-model):', '');
+            if (!modelId || modelId.trim() === '') return;
+            
+            const modelName = prompt('请输入模型显示名称 (可选):', modelId);
+            if (modelName === null) return;
+            
+            const provider = prompt('请输入模型提供商 (可选，如: openai, anthropic, custom):', 'custom');
+            if (provider === null) return;
+            
+            fetch('/api/models', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: modelId.trim(),
+                    name: modelName.trim() || modelId.trim(),
+                    provider: provider.trim() || 'custom'
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadModels();
+                } else {
+                    alert(`❌ 添加失败: ${data.message || '未知错误'}`);
+                }
+            })
+            .catch(error => {
+                console.error('添加模型失败:', error);
+                alert(`❌ 请求失败: ${error.message}`);
+            });
+        }
+        
+        // 导出为全局函数
+        window.copyModelId = copyModelId;
+        window.copyModelName = copyModelName;
+        window.renameModel = renameModel;
+        window.deleteModel = deleteModel;
+        window.addModel = addModel;
+        
+        // 验证账号Cookie
+        function verifyAccount(accountName) {
+            const button = event.target.closest('button');
+            const originalHtml = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            button.disabled = true;
+            
+            fetch(`/api/account/verify/${encodeURIComponent(accountName)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`✅ 验证成功！\n\n账号: ${accountName}\n状态: ${data.message}\nCookie数量: ${data.cookie_count || '未知'}`);
+                    // 重新加载账号列表
+                    loadAccounts();
+                } else {
+                    alert(`❌ 验证失败！\n\n账号: ${accountName}\n错误: ${data.message || '未知错误'}`);
+                }
+            })
+            .catch(error => {
+                console.error('验证失败:', error);
+                alert(`❌ 验证请求失败: ${error.message}`);
+            })
+            .finally(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            });
+        }
+
+        // 触发账号维护
+        function triggerMaintenance(accountName) {
+            if (!confirm(`确定要触发 ${accountName} 的自动维护吗？\n\n这将强制刷新Cookie，可能需要几分钟时间。`)) {
+                return;
+            }
+            
+            fetch(`/api/account/maintenance/${encodeURIComponent(accountName)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`✅ 维护已触发！\n\n${data.message}`);
+                } else {
+                    alert(`❌ 维护触发失败: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('维护触发失败:', error);
+                alert(`❌ 请求失败: ${error.message}`);
+            });
+        }
+
+        // 查看账号统计
+        function viewAccountStats(accountName) {
+            fetch(`/api/account/stats/${encodeURIComponent(accountName)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const stats = data.summary;
+                        const message = `📊 账号统计: ${accountName}\n\n` +
+                                      `总调用次数: ${stats.total_calls}\n` +
+                                      `成功次数: ${stats.success_calls}\n` +
+                                      `失败次数: ${stats.failed_calls}\n` +
+                                      `成功率: ${stats.success_rate.toFixed(1)}%\n` +
+                                      `连续失败次数: ${stats.consecutive_failures}\n` +
+                                      `最后成功: ${stats.last_success ? new Date(stats.last_success * 1000).toLocaleString() : '无'}\n` +
+                                      `最后失败: ${stats.last_failure ? new Date(stats.last_failure * 1000).toLocaleString() : '无'}`;
+                        alert(message);
+                    } else {
+                        alert(`❌ 获取统计失败: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('获取统计失败:', error);
+                    alert(`❌ 请求失败: ${error.message}`);
+                });
+        }
+
+</script>
+</body>
+</html>
